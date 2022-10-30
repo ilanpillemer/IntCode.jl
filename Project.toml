@@ -1,0 +1,7 @@
+name = "IntCode"
+uuid = "11189ab8-0cfa-4711-9680-58815fb7a446"
+authors = ["\"Ilan <ilan.pillemer@gmail.com>"]
+version = "0.1.0"
+
+[deps]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
