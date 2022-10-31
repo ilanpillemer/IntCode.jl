@@ -35,7 +35,7 @@ function exec(p)
     opcode = p[pc]
     while opcode != 99
         args = [pc + 1, pc + 2, pc + 3]
-        pc = pc + op(p, args, opcode)
+        pc = op(pc, p, args, opcode)
         opcode = p[pc]
     end
     p[0]
@@ -50,24 +50,24 @@ function get_modes(opcode::Int64)
     (s[3] == '0', s[2] == '0', s[3] == '0')
 end
 
-function op(p, arg, opcode::Int64)
+function op(pc, p, arg, opcode::Int64)
     (x, y, z) = get_modes(opcode)
     opcode = opcode % 100
     if opcode == 1
         a = p[arg[3]]
         p[a] = add(p, arg[1], arg[2], x, y)
-        return 4
+        return pc + 4
     elseif opcode == 2
         a = p[arg[3]]
         p[a] = mul(p, arg[1], arg[2], x, y)
-        return 4
+        return pc + 4
     elseif opcode == 3
         a = p[arg[1]]
         p[a] = get_input()
-        return 2
+        return pc + 2
     elseif opcode == 4
         output(p, arg[1], x)
-        return 2
+        return pc + 2
     else
         println("panic: unknown opcode $opcode")
         exit()
