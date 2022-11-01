@@ -2,6 +2,8 @@ module IntCode
 
 greet() = println("Hello World!!")
 
+accum = [5]
+
 function load(name)
     p = Dict()
     open(name, "r") do f
@@ -49,20 +51,24 @@ function jz(pc, p, x, y, px, py)
     a == 0 ? b : pc + 3
 end
 
-function output(p, x, px)
+function output(p, x, px, accum)
     a = px ? p[p[x]] : p[x]
-    println(a)
+    push!(accum, a)
 end
 
-function exec(p)
+function exec(p, accum)
     pc = 0
     opcode = p[pc]
     while opcode != 99
         args = [pc + 1, pc + 2, pc + 3]
-        pc = op(pc, p, args, opcode)
+        pc = op(pc, p, args, opcode, accum)
         opcode = p[pc]
     end
-    p[0]
+    accum
+end
+
+function exec(p)
+    exec(p, empty([0]))
 end
 n = 1
 set_input(x) = global n = x
@@ -75,7 +81,7 @@ function get_modes(opcode::Int64)
     (s[3] == '0', s[2] == '0', s[3] == '0')
 end
 
-function op(pc, p, arg, opcode::Int64)
+function op(pc, p, arg, opcode::Int64, accum)
     (x, y, z) = get_modes(opcode)
     opcode = opcode % 100
     if opcode == 1
@@ -91,7 +97,7 @@ function op(pc, p, arg, opcode::Int64)
         p[a] = get_input()
         return pc + 2
     elseif opcode == 4
-        output(p, arg[1], x)
+        output(p, arg[1], x, accum)
         return pc + 2
     elseif opcode == 5 # jump-if-true
         pc = jnz(pc, p, arg[1], arg[2], x, y)
