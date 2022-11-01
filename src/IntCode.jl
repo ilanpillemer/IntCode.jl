@@ -70,8 +70,6 @@ function exec(p, accum, input_fn::Function)
     accum
 end
 
-
-
 function get_modes(opcode::Int64)
     s = "$opcode"
     s = lpad(s, 5, "0")
@@ -93,6 +91,7 @@ function op(pc, p, arg, opcode::Int64, accum, input_fn::Function)
     elseif opcode == 3
         a = p[arg[1]]
         p[a] = input_fn()
+        #println("p[a] -> $(p[a])")
         return pc + 2
     elseif opcode == 4
         output(p, arg[1], x, accum)
