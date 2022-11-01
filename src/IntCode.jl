@@ -56,23 +56,21 @@ function output(p, x, px, accum)
     push!(accum, a)
 end
 
-function exec(p, accum)
+exec(p) = exec(p, empty([0]), () -> 1)
+exec(p, input_fn::Function) = exec(p, empty([0]), input_fn)
+
+function exec(p, accum, input_fn::Function)
     pc = 0
     opcode = p[pc]
     while opcode != 99
         args = [pc + 1, pc + 2, pc + 3]
-        pc = op(pc, p, args, opcode, accum)
+        pc = op(pc, p, args, opcode, accum, input_fn)
         opcode = p[pc]
     end
     accum
 end
 
-function exec(p)
-    exec(p, empty([0]))
-end
-n = 1
-set_input(x) = global n = x
-get_input() = n
+
 
 function get_modes(opcode::Int64)
     s = "$opcode"
@@ -81,7 +79,7 @@ function get_modes(opcode::Int64)
     (s[3] == '0', s[2] == '0', s[3] == '0')
 end
 
-function op(pc, p, arg, opcode::Int64, accum)
+function op(pc, p, arg, opcode::Int64, accum, input_fn::Function)
     (x, y, z) = get_modes(opcode)
     opcode = opcode % 100
     if opcode == 1
@@ -94,7 +92,7 @@ function op(pc, p, arg, opcode::Int64, accum)
         return pc + 4
     elseif opcode == 3
         a = p[arg[1]]
-        p[a] = get_input()
+        p[a] = input_fn()
         return pc + 2
     elseif opcode == 4
         output(p, arg[1], x, accum)
