@@ -2,8 +2,6 @@ module IntCode
 
 greet() = println("Hello World!!")
 
-accum = [5]
-
 function load(name)
     p = Dict()
     open(name, "r") do f
@@ -51,23 +49,25 @@ function jz(pc, p, x, y, px, py)
     a == 0 ? b : pc + 3
 end
 
-function output(p, x, px, accum)
+function output(p, x, px, out::Channel)
     a = px ? p[p[x]] : p[x]
-    push!(accum, a)
+    put!(out, a)
 end
 
-exec(p) = exec(p, empty([0]), () -> 1)
-exec(p, input_fn::Function) = exec(p, empty([0]), input_fn)
+exec(p) = exec(p, Channel(Inf), Channel(1))
+exec(p, in::Channel) = exec(p, Channel(Inf), in)
 
-function exec(p, accum, input_fn::Function)
+
+function exec(p, out::Channel, in::Channel)
     pc = 0
     opcode = p[pc]
     while opcode != 99
         args = [pc + 1, pc + 2, pc + 3]
-        pc = op(pc, p, args, opcode, accum, input_fn)
+        pc = op(pc, p, args, opcode, out, in)
         opcode = p[pc]
     end
-    accum
+    close(out)
+    #println("halt")
 end
 
 function get_modes(opcode::Int64)
@@ -77,7 +77,7 @@ function get_modes(opcode::Int64)
     (s[3] == '0', s[2] == '0', s[3] == '0')
 end
 
-function op(pc, p, arg, opcode::Int64, accum, input_fn::Function)
+function op(pc, p, arg, opcode::Int64, out::Channel, in::Channel)
     (x, y, z) = get_modes(opcode)
     opcode = opcode % 100
     if opcode == 1
@@ -90,11 +90,11 @@ function op(pc, p, arg, opcode::Int64, accum, input_fn::Function)
         return pc + 4
     elseif opcode == 3
         a = p[arg[1]]
-        p[a] = input_fn()
+        p[a] = take!(in)
         #println("p[a] -> $(p[a])")
         return pc + 2
     elseif opcode == 4
-        output(p, arg[1], x, accum)
+        output(p, arg[1], x, out)
         return pc + 2
     elseif opcode == 5 # jump-if-true
         pc = jnz(pc, p, arg[1], arg[2], x, y)
