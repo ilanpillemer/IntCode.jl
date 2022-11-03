@@ -1,7 +1,5 @@
 module IntCode
 
-greet() = println("Hello World!!")
-
 function load(name)
     p = Dict()
     open(name, "r") do f
@@ -54,30 +52,30 @@ function output(p, x, px, out::Channel)
     put!(out, a)
 end
 
-exec(p) = exec(p, Channel(Inf), Channel(1))
-exec(p, in::Channel) = exec(p, Channel(Inf), in)
+exec(p) = exec(p, Channel(Inf), Channel(1), Channel(1))
+exec(p, in::Channel) = exec(p, Channel(Inf), in, Channel(1))
+exec(p, out::Channel, in::Channel) = exec(p, out, in, Channel(1))
 
-
-function exec(p, out::Channel, in::Channel)
+function exec(p, out::Channel, in::Channel, quit::Channel)
     pc = 0
     opcode = p[pc]
     while opcode != 99
         args = [pc + 1, pc + 2, pc + 3]
-        pc = op(pc, p, args, opcode, out, in)
+        pc = op(pc, p, args, opcode, out, in, quit)
         opcode = p[pc]
     end
+    close(in)
     close(out)
-    #println("halt")
+    close(quit)
 end
 
 function get_modes(opcode::Int64)
     s = "$opcode"
     s = lpad(s, 5, "0")
-    #println(s)
     (s[3] == '0', s[2] == '0', s[3] == '0')
 end
 
-function op(pc, p, arg, opcode::Int64, out::Channel, in::Channel)
+function op(pc, p, arg, opcode::Int64, out::Channel, in::Channel, quit::Channel)
     (x, y, z) = get_modes(opcode)
     opcode = opcode % 100
     if opcode == 1
@@ -91,7 +89,6 @@ function op(pc, p, arg, opcode::Int64, out::Channel, in::Channel)
     elseif opcode == 3
         a = p[arg[1]]
         p[a] = take!(in)
-        #println("p[a] -> $(p[a])")
         return pc + 2
     elseif opcode == 4
         output(p, arg[1], x, out)
@@ -112,6 +109,9 @@ function op(pc, p, arg, opcode::Int64, out::Channel, in::Channel)
         return pc + 4
     else
         println("panic: unknown opcode $opcode")
+        close(in)
+        close(out)
+        close(quit)
         exit()
     end
 end
