@@ -11,45 +11,47 @@ function load(name)
     p
 end
 
-function add(p, x, y, px, py)
-    a = px ? p[p[x]] : p[x]
-    b = py ? p[p[y]] : p[y]
-    a + b
+# need to use thunks when using modes, as may be invalid references
+
+function add(p, rb, x, y, px, py)
+    a = Dict([('0', () -> p[p[x]]), ('1', () -> p[x])])
+    b = Dict([('0', () -> p[p[y]]), ('1', () -> p[y])])
+    a[px]() + b[py]()
 end
 
-function mul(p, x, y, px, py)
-    a = px ? p[p[x]] : p[x]
-    b = py ? p[p[y]] : p[y]
-    a * b
+function mul(p, rb, x, y, px, py)
+    a = Dict([('0', () -> p[p[x]]), ('1', () -> p[x])])
+    b = Dict([('0', () -> p[p[y]]), ('1', () -> p[y])])
+    a[px]() * b[py]()
 end
 
-function less(p, x, y, px, py)
-    a = px ? p[p[x]] : p[x]
-    b = py ? p[p[y]] : p[y]
-    a < b ? 1 : 0
+function less(p, rb, x, y, px, py)
+    a = Dict([('0', () -> p[p[x]]), ('1', () -> p[x])])
+    b = Dict([('0', () -> p[p[y]]), ('1', () -> p[y])])
+    a[px]() < b[py]() ? 1 : 0
 end
 
-function eql(p, x, y, px, py)
-    a = px ? p[p[x]] : p[x]
-    b = py ? p[p[y]] : p[y]
-    a == b ? 1 : 0
+function eql(p, rb, x, y, px, py)
+    a = Dict([('0', () -> p[p[x]]), ('1', () -> p[x])])
+    b = Dict([('0', () -> p[p[y]]), ('1', () -> p[y])])
+    a[px]() == b[py]() ? 1 : 0
 end
 
-function jnz(pc, p, x, y, px, py)
-    a = px ? p[p[x]] : p[x]
-    b = py ? p[p[y]] : p[y]
-    a > 0 ? b : pc + 3
+function jnz(pc, rb, p, x, y, px, py)
+    a = Dict([('0', () -> p[p[x]]), ('1', () -> p[x])])
+    b = Dict([('0', () -> p[p[y]]), ('1', () -> p[y])])
+    a[px]() > 0 ? b[py]() : pc + 3
 end
 
-function jz(pc, p, x, y, px, py)
-    a = px ? p[p[x]] : p[x]
-    b = py ? p[p[y]] : p[y]
-    a == 0 ? b : pc + 3
+function jz(pc, rb, p, x, y, px, py)
+    a = Dict([('0', () -> p[p[x]]), ('1', () -> p[x])])
+    b = Dict([('0', () -> p[p[y]]), ('1', () -> p[y])])
+    a[px]() == 0 ? b[py]() : pc + 3
 end
 
-function output(p, x, px, out::Channel)
-    a = px ? p[p[x]] : p[x]
-    put!(out, a)
+function output(p, rb, x, px, out::Channel)
+    a = Dict([('0', () -> p[p[x]]), ('1', () -> p[x])])
+    put!(out, a[px]())
 end
 
 exec(p) = exec(p, Channel(Inf), Channel(1), Channel(1))
@@ -58,10 +60,11 @@ exec(p, out::Channel, in::Channel) = exec(p, out, in, Channel(1))
 
 function exec(p, out::Channel, in::Channel, quit::Channel)
     pc = 0
+    rb = 0
     opcode = p[pc]
     while opcode != 99
         args = [pc + 1, pc + 2, pc + 3]
-        pc = op(pc, p, args, opcode, out, in, quit)
+        pc, rb = op(pc, rb, p, args, opcode, out, in, quit)
         opcode = p[pc]
     end
     close(in)
@@ -72,41 +75,46 @@ end
 function get_modes(opcode::Int64)
     s = "$opcode"
     s = lpad(s, 5, "0")
-    (s[3] == '0', s[2] == '0', s[3] == '0')
+    (s[3], s[2], s[1])
 end
 
-function op(pc, p, arg, opcode::Int64, out::Channel, in::Channel, quit::Channel)
+function writeto(arg, p, mode)
+    a = Dict([('0', () -> p[arg]), ('1', () -> arg)])
+    a[mode]()
+end
+
+function op(pc, rb, p, arg, opcode::Int64, out::Channel, in::Channel, quit::Channel)
     (x, y, z) = get_modes(opcode)
     opcode = opcode % 100
     if opcode == 1
-        a = p[arg[3]]
-        p[a] = add(p, arg[1], arg[2], x, y)
-        return pc + 4
+        a = writeto(arg[3], p, z)
+        p[a] = add(p, rb, arg[1], arg[2], x, y)
+        return pc + 4, rb
     elseif opcode == 2
-        a = p[arg[3]]
-        p[a] = mul(p, arg[1], arg[2], x, y)
-        return pc + 4
+        a = writeto(arg[3], p, z)
+        p[a] = mul(p, rb, arg[1], arg[2], x, y)
+        return pc + 4, rb
     elseif opcode == 3
-        a = p[arg[1]]
+        a = writeto(arg[1], p, z)
         p[a] = take!(in)
-        return pc + 2
+        return pc + 2, rb
     elseif opcode == 4
-        output(p, arg[1], x, out)
-        return pc + 2
+        output(p, rb, arg[1], x, out)
+        return pc + 2, rb
     elseif opcode == 5 # jump-if-true
-        pc = jnz(pc, p, arg[1], arg[2], x, y)
-        return pc
+        pc = jnz(pc, rb, p, arg[1], arg[2], x, y)
+        return pc, rb
     elseif opcode == 6 # jump-if-false
-        pc = jz(pc, p, arg[1], arg[2], x, y)
-        return pc
+        pc = jz(pc, rb, p, arg[1], arg[2], x, y)
+        return pc, rb
     elseif opcode == 7
-        a = p[arg[3]]
-        p[a] = less(p, arg[1], arg[2], x, y)
-        return pc + 4
+        a = writeto(arg[3], p, z)
+        p[a] = less(p, rb, arg[1], arg[2], x, y)
+        return pc + 4, rb
     elseif opcode == 8
-        a = p[arg[3]]
-        p[a] = eql(p, arg[1], arg[2], x, y)
-        return pc + 4
+        a = writeto(arg[3], p, z)
+        p[a] = eql(p, rb, arg[1], arg[2], x, y)
+        return pc + 4, rb
     else
         println("panic: unknown opcode $opcode")
         close(in)
